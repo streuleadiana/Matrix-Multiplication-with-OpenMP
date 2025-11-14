@@ -7,30 +7,27 @@
 #include <omp.h>
 
 #define EPSILON 0.000001
-#define N 1000
+#define N 3000
+#define BLOCK_SIZE 64
+#define min(a,b) (((a)<(b))?(a):(b))
 //#define DEBUG
 
-//Matrice
-//c=a*b (serial); c2=a*b(paralel)
-//ijk este matricea primei versiuni cu care compar
+//MATRICE
 double a[N][N], b[N][N], c[N][N], c2[N][N];
 double ijk[N][N];
 
-//MATRICE
 void Generate_matrix(char *prompt, double mat[N][N])
 {
     int i, j;
-
     printf("%s\n", prompt);
     for (i = 0; i < N; i++)
         for (j = 0; j < N; j++)
-            mat[i][j] = rand();
+            mat[i][j] = (double)rand()/RAND_MAX;
 }
 
 void Print_matrix(char *title, double mat[N][N])
 {
     int i, j;
-
     printf("%s\n", title);
     for (i = 0; i < N; i++)
     {
@@ -43,7 +40,6 @@ void Print_matrix(char *title, double mat[N][N])
 int Equal_matrixes(double mat1[N][N], double mat2[N][N])
 {
     int i, j;
-
     for (i = 0; i < N; i++)
     {
         for (j = 0; j < N; j++)
@@ -59,10 +55,14 @@ int Equal_matrixes(double mat1[N][N], double mat2[N][N])
 void serial_ijk()
 {
     int i, j, k;
+
+    for (i = 0; i < N; i++)
+        for (j = 0; j < N; j++)
+            c[i][j] = 0;
+
     for (i = 0; i < N; i++)
         for (j = 0; j < N; j++)
         {
-            c[i][j] = 0;
             for (k = 0; k < N; k++)
                 c[i][j] += a[i][k] * b[k][j];
         }
@@ -70,7 +70,7 @@ void serial_ijk()
 void serial_ikj()
 {
     int i, j, k;
-    double temp, aik;
+    double aik;
 
     for (i = 0; i < N; i++)
         for (j = 0; j < N; j++)
@@ -89,6 +89,11 @@ void serial_ikj()
 void serial_jik()
 {
     int i, j, k;
+
+    for (i = 0; i < N; i++)
+        for (j = 0; j < N; j++)
+            c[i][j] = 0;
+
     for (j = 0; j < N; j++)
         for (i = 0; i < N; i++)
         {
@@ -167,8 +172,12 @@ void parallel_ijk(int nthreads, int chunk)
 #pragma omp for schedule(static, chunk)
         for (i = 0; i < N; i++)
             for (j = 0; j < N; j++)
-            {
                 c2[i][j] = 0;
+
+#pragma omp for schedule(static, chunk)
+        for (i = 0; i < N; i++)
+            for (j = 0; j < N; j++)
+            {
                 for (k = 0; k < N; k++)
                     c2[i][j] += a[i][k] * b[k][j];
             }
@@ -204,6 +213,11 @@ void parallel_jik(int nthreads, int chunk)
 #pragma omp parallel num_threads(nthreads), default(none), private(i, j, k), shared(a, b, c2, chunk)
     {
 #pragma omp for schedule(static, chunk)
+        for (i = 0; i < N; i++)
+            for (j = 0; j < N; j++)
+                c2[i][j] = 0;
+
+#pragma omp for schedule(static, chunk)
         for (j = 0; j < N; j++)
         {
             for (i = 0; i < N; i++)
@@ -225,7 +239,7 @@ void parallel_jki(int nthreads, int chunk)
 
 #pragma omp parallel num_threads(nthreads), default(none), private(i, j, k, bkj), shared(a, b, c2, chunk)
     {
-#pragma omp for schedule(static)
+#pragma omp for schedule(static, chunk)
         for (i = 0; i < N; i++)
             for (j = 0; j < N; j++)
                 c2[i][j] = 0.0;
@@ -251,7 +265,7 @@ void parallel_kij(int nthreads, int chunk)
 
 #pragma omp parallel num_threads(nthreads), default(none), private(i, j, k, aik), shared(a, b, c2, chunk)
     {
-#pragma omp for schedule(static)
+#pragma omp for schedule(static, chunk)
         for (i = 0; i < N; i++)
             for (j = 0; j < N; j++)
                 c2[i][j] = 0.0;
@@ -277,7 +291,7 @@ void parallel_kji(int nthreads, int chunk)
 
 #pragma omp parallel num_threads(nthreads), default(none), private(i, j, k, bkj), shared(a, b, c2, chunk)
     {
-#pragma omp for schedule(static)
+#pragma omp for schedule(static, chunk)
         for (i = 0; i < N; i++)
             for (j = 0; j < N; j++)
                 c2[i][j] = 0.0;
@@ -298,21 +312,100 @@ void parallel_kji(int nthreads, int chunk)
 }
 
 //INMULTIRE PE BLOCURI SERIAL
-void serial_blocked();
+void serial_blocked(int B)
+{
+    int i, j, k, ii, jj, kk;
+    int i_end, j_end, k_end;
+    double aik;
+
+    for (ii = 0; ii < N; ii += B)
+    {
+        for (jj = 0; jj < N; jj += B)
+        {
+            i_end = min(ii + B, N);
+            j_end = min(jj + B, N);
+            for (i = ii; i < i_end; i++)
+            {
+                for (j = jj; j < j_end; j++)
+                {
+                    c[i][j] = 0.0;
+                }
+            }
+
+            for (kk = 0; kk < N; kk += B)
+            {
+                k_end = min(kk + B, N);
+                for (i = ii; i < i_end; i++)
+                {
+                    for (k = kk; k < k_end; k++)
+                    {
+                        aik = a[i][k];
+                        for (j = jj; j < j_end; j++)
+                        {
+                            c[i][j] += aik * b[k][j];
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 //INMULTIRE PE BLOCURI PARALEL
-void parallel_blocked();
+void parallel_blocked(int B, int nthreads)
+{
+    int i, j, k, ii, jj, kk;
+    int i_end, j_end, k_end;
+    double aik;
+
+#pragma omp parallel for num_threads(nthreads) private(j) schedule(static)
+    for (i = 0; i < N; i++)
+    {
+        for (j = 0; j < N; j++)
+        {
+            c2[i][j] = 0.0;
+        }
+    }
+
+#pragma omp parallel num_threads(nthreads), default(none), shared(a, b, c2, B, nthreads) private(i, j, k, ii, jj, kk, i_end, j_end, k_end, aik)
+    {
+#pragma omp for schedule(dynamic)
+        for (ii = 0; ii < N; ii += B)
+        {
+            for (jj = 0; jj < N; jj += B)
+            {
+                i_end = min(ii + B, N);
+                j_end = min(jj + B, N);
+                for (kk = 0; kk < N; kk += B)
+                {
+                    k_end = min(kk + B, N);
+                    for (i = ii; i < i_end; i++)
+                    {
+                        for (k = kk; k < k_end; k++)
+                        {
+                            aik = a[i][k];
+                            for (j = jj; j < j_end; j++)
+                            {
+                                c2[i][j] += aik * b[k][j];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 //MAIN
 int main(void)
 {
     int nthreads, chunk;
     double start, end, time_serial, time_parallel;
-    srand(time(NULL));
-    chunk=10;
     nthreads=8;
-    //Generare matrice
+    chunk=10;
 
+    //Generare matrice
+    srand(time(NULL));
     Generate_matrix("Generating matrix a ...", a);
     Generate_matrix("Generating matrix b ...", b);
 
@@ -522,6 +615,33 @@ int main(void)
     printf("Speedup = %2.2lf\n", time_serial / time_parallel);
     if (!Equal_matrixes(ijk, c2))
         printf("Attention! Serial and Parallel kji Result not the same ! \n");
+
+//BLOCKED
+    int b=BLOCK_SIZE;
+    printf("\n- BLOCKED (Block Size = %d) -\n", b);
+    //Serial
+    printf("Start working serial blocked ... \n");
+    start = omp_get_wtime();
+    serial_blocked(b);
+    end = omp_get_wtime();
+    time_serial = end - start;
+    printf("Serial time blocked %lf seconds \n", time_serial);
+
+    if (!Equal_matrixes(ijk, c))
+        printf("Attention! Serial blocked Result not the same as Gold! \n");
+
+    // Parallel
+    printf("Start working parallel blocked with %d threads ... \n", nthreads);
+    start = omp_get_wtime();
+    parallel_blocked(b, nthreads);
+    end = omp_get_wtime();
+    time_parallel = (end - start);
+    printf("Parallel time blocked %lf seconds \n", time_parallel);
+
+    //Speedup
+    printf("Speedup = %2.2lf\n", time_serial / time_parallel);
+    if (!Equal_matrixes(ijk, c2))
+        printf("Attention! Parallel blocked Result not the same as Gold! \n");
 
     return 0;
 }
