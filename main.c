@@ -7,7 +7,7 @@
 #include <omp.h>
 
 #define EPSILON 0.000001
-#define N 3000
+#define N 1000
 #define BLOCK_SIZE 64
 #define min(a,b) (((a)<(b))?(a):(b))
 //#define DEBUG
@@ -460,6 +460,7 @@ int main(void)
 
     if (!Equal_matrixes(ijk, c))
         printf("Attention! Serial ikj Result not the same as Gold! \n");
+
 #ifdef DEBUG
     Print_matrix("Serial result ikj...", c);
 #endif
@@ -493,6 +494,7 @@ int main(void)
 
     if (!Equal_matrixes(ijk, c))
         printf("Attention! Serial jik Result not the same as Gold! \n");
+
 #ifdef DEBUG
     Print_matrix("Serial result jik...", c);
 #endif
@@ -630,6 +632,10 @@ int main(void)
     if (!Equal_matrixes(ijk, c))
         printf("Attention! Serial blocked Result not the same as Gold! \n");
 
+#ifdef DEBUG
+    Print_matrix("Parallel result kji...", c2);
+#endif
+
     // Parallel
     printf("Start working parallel blocked with %d threads ... \n", nthreads);
     start = omp_get_wtime();
@@ -637,6 +643,10 @@ int main(void)
     end = omp_get_wtime();
     time_parallel = (end - start);
     printf("Parallel time blocked %lf seconds \n", time_parallel);
+
+#ifdef DEBUG
+    Print_matrix("Parallel result kji...", c2);
+#endif
 
     //Speedup
     printf("Speedup = %2.2lf\n", time_serial / time_parallel);
