@@ -1,4 +1,4 @@
-﻿//Matrix Multiplication with OpenMP
+//Matrix Multiplication with OpenMP
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -55,6 +55,7 @@ int Equal_matrixes(double mat1[N][N], double mat2[N][N])
 void serial_ijk()
 {
     int i, j, k;
+    double suma;
 
     for (i = 0; i < N; i++)
         for (j = 0; j < N; j++)
@@ -63,8 +64,10 @@ void serial_ijk()
     for (i = 0; i < N; i++)
         for (j = 0; j < N; j++)
         {
+            suma=0.0;
             for (k = 0; k < N; k++)
-                c[i][j] += a[i][k] * b[k][j];
+                suma += a[i][k] * b[k][j];
+            c[i][j]=suma;
         }
 }
 void serial_ikj()
@@ -89,6 +92,7 @@ void serial_ikj()
 void serial_jik()
 {
     int i, j, k;
+    double suma;
 
     for (i = 0; i < N; i++)
         for (j = 0; j < N; j++)
@@ -97,7 +101,7 @@ void serial_jik()
     for (j = 0; j < N; j++)
         for (i = 0; i < N; i++)
         {
-            double suma=0.0;
+            suma=0.0;
             for (k = 0; k < N; k++)
                 suma+=a[i][k]*b[k][j];
             c[i][j] = suma;
@@ -166,8 +170,8 @@ void serial_kji()
 void parallel_ijk(int nthreads, int chunk)
 {
     int i, j, k;
-    double temp;
-#pragma omp parallel num_threads(nthreads), default(none), private(i, j, k, temp), shared(a, b, c2, chunk)
+    double suma;
+#pragma omp parallel num_threads(nthreads), default(none), private(i, j, k, suma), shared(a, b, c2, chunk)
     {
 #pragma omp for schedule(static, chunk)
         for (i = 0; i < N; i++)
@@ -178,8 +182,10 @@ void parallel_ijk(int nthreads, int chunk)
         for (i = 0; i < N; i++)
             for (j = 0; j < N; j++)
             {
+                suma=0.0;
                 for (k = 0; k < N; k++)
-                    c2[i][j] += a[i][k] * b[k][j];
+                    suma += a[i][k] * b[k][j];
+                c2[i][j]=suma;
             }
     }
 }
@@ -209,8 +215,9 @@ void parallel_ikj(int nthreads, int chunk)
 void parallel_jik(int nthreads, int chunk)
 {
     int i, j, k;
+    double suma;
 
-#pragma omp parallel num_threads(nthreads), default(none), private(i, j, k), shared(a, b, c2, chunk)
+#pragma omp parallel num_threads(nthreads), default(none), private(i, j, k, suma), shared(a, b, c2, chunk)
     {
 #pragma omp for schedule(static, chunk)
         for (i = 0; i < N; i++)
@@ -222,12 +229,12 @@ void parallel_jik(int nthreads, int chunk)
         {
             for (i = 0; i < N; i++)
             {
-                double sum = 0.0;
+                suma = 0.0;
                 for (k = 0; k < N; k++)
                 {
-                    sum += a[i][k] * b[k][j];
+                    suma += a[i][k] * b[k][j];
                 }
-                c2[i][j] = sum;
+                c2[i][j] = suma;
             }
         }
     }
@@ -358,15 +365,6 @@ void parallel_blocked(int B, int nthreads)
     int i_end, j_end, k_end;
     double aik;
 
-#pragma omp parallel for num_threads(nthreads) private(j) schedule(static)
-    for (i = 0; i < N; i++)
-    {
-        for (j = 0; j < N; j++)
-        {
-            c2[i][j] = 0.0;
-        }
-    }
-
 #pragma omp parallel num_threads(nthreads), default(none), shared(a, b, c2, B, nthreads) private(i, j, k, ii, jj, kk, i_end, j_end, k_end, aik)
     {
 #pragma omp for schedule(dynamic)
@@ -376,6 +374,14 @@ void parallel_blocked(int B, int nthreads)
             {
                 i_end = min(ii + B, N);
                 j_end = min(jj + B, N);
+                for (i = ii; i < i_end; i++)
+                {
+                    for (j = jj; j < j_end; j++)
+                    {
+                        c2[i][j] = 0.0;
+                    }
+                }
+
                 for (kk = 0; kk < N; kk += B)
                 {
                     k_end = min(kk + B, N);
